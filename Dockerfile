@@ -1,22 +1,21 @@
-# Use a multi-stage build to install Node.js dependencies
+# Use Node.js for building frontend assets
 FROM node:20 as node-builder
-
 
 WORKDIR /app
 
-# Copy only package.json and package-lock.json for caching
+# Copy only package.json and package-lock.json first for better caching
 COPY package.json package-lock.json ./
 
 # Install Node.js dependencies
 RUN npm install --legacy-peer-deps
 
-
-# Copy the rest of the project files and build Vite assets
+# Copy the rest of the project files
 COPY . .
-RUN npm run build
 
-# Now use a PHP image for Laravel
-FROM php:8.2-fpm
+# Install PHP dependencies first (so vendor/tightenco/ziggy exists)
+FROM php:8.2-fpm as php-builder
+
+WORKDIR /var/www/html
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -35,15 +34,13 @@ RUN apt-get update && apt-get install -y \
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-WORKDIR /var/www/html
-
 # Copy Laravel project files
 COPY . .
 
-# Install PHP dependencies
+# Install PHP dependencies (this creates the vendor directory)
 RUN composer install --no-dev --optimize-autoloader
 
-# Copy built assets from Node.js stage
+# Copy the built assets from the Node.js stage
 COPY --from=node-builder /app/public/build /var/www/html/public/build
 
 # Set permissions for Laravel
