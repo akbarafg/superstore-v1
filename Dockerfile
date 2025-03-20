@@ -1,5 +1,6 @@
 # Use a multi-stage build to install Node.js dependencies
-FROM node:18 as node-builder
+FROM node:20 as node-builder
+
 
 WORKDIR /app
 
@@ -7,7 +8,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 
 # Install Node.js dependencies
-RUN npm install
+RUN npm install --legacy-peer-deps
+
 
 # Copy the rest of the project files and build Vite assets
 COPY . .
