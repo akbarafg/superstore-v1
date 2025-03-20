@@ -27,11 +27,11 @@ COPY . .
 # Install PHP dependencies
 RUN composer install --no-dev --optimize-autoloader
 
-# Set permissions
+# Set permissions for Laravel
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
-# Expose port 9000 for PHP-FPM
-EXPOSE 9000
+# Expose the correct port (Render assigns $PORT dynamically)
+EXPOSE 10000
 
-# Start PHP-FPM
-CMD ["php-fpm"]
+# Start Laravel application using PHP's built-in server
+CMD php artisan serve --host 0.0.0.0 --port=$PORT
