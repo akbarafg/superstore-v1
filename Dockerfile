@@ -1,9 +1,9 @@
-# Step 1: Use PHP to install Laravel dependencies first
+# Step 1: Base PHP Image for Laravel
 FROM php:8.2-fpm as php-builder
 
 WORKDIR /var/www/html
 
-# Install system dependencies
+# Install system dependencies and PHP extensions
 RUN apt-get update && apt-get install -y \
     curl \
     unzip \
@@ -23,29 +23,36 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Copy Laravel project files
 COPY . .
 
-# Install Laravel dependencies
+# ✅ Ensure Laravel is installed before running artisan commands
 RUN composer install --no-dev --optimize-autoloader
 
-# Step 2: Use Node.js to build frontend assets
+# ✅ Fix permissions for Laravel storage
+RUN chmod -R 777 storage bootstrap/cache
+
+# ✅ Run artisan commands inside the PHP container
+RUN php artisan config:clear && php artisan cache:clear
+RUN php artisan route:clear && php artisan view:clear
+RUN php artisan ziggy:generate
+
+# Step 2: Node.js for Vite Build
 FROM node:20 as node-builder
 
 WORKDIR /app
 
-# Copy only package.json and package-lock.json first (for better caching)
+# Copy only package.json and package-lock.json first (for caching)
 COPY package.json package-lock.json ./
 
 # Install Node.js dependencies
 RUN npm install --legacy-peer-deps
 
-# Copy the rest of the project files (now including Laravel with Ziggy)
+# Copy full project
 COPY . .
 
-# Ensure Laravel is ready before building Vite assets
+# ✅ Ensure Laravel is ready before building Vite assets
 RUN php artisan config:clear
-RUN php artisan route:clear
 RUN php artisan ziggy:generate
 
-# Now build frontend assets
+# ✅ Now build frontend assets
 RUN npm run build
 
 # Step 3: Final PHP Image
