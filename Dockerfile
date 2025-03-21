@@ -1,75 +1,37 @@
-# Step 1: Use official PHP 8.1 image
-FROM php:8.1-fpm as php-builder
+# Stage 1: Build the application
+FROM node:18-alpine AS builder
 
-WORKDIR /var/www/html
-
-# Install required system dependencies and PHP extensions
-RUN apt-get update && apt-get install -y \
-    curl \
-    unzip \
-    git \
-    libpng-dev \
-    libjpeg-dev \
-    libfreetype6-dev \
-    libonig-dev \
-    libzip-dev \
-    zip \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install pdo pdo_mysql gd mbstring zip exif pcntl bcmath
-
-# ✅ Verify PHP version
-RUN php -v
-
-# Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
-
-# Copy Laravel project files
-COPY . .
-
-# ✅ Ensure Composer dependencies are installed before running artisan commands
-RUN composer install --no-dev --optimize-autoloader
-
-# ✅ Fix Laravel permissions
-RUN chmod -R 777 storage bootstrap/cache
-
-# ✅ Run artisan commands (NOW PHP IS INSTALLED)
-RUN php artisan config:clear && php artisan cache:clear
-RUN php artisan route:clear && php artisan view:clear
-RUN php artisan ziggy:generate
-
-# Step 2: Use Node.js for Vite Build
-FROM node:20 as node-builder
-
+# Set working directory and environment variables
 WORKDIR /app
+ENV NODE_ENV=production
 
-# Copy only package.json and package-lock.json first (for caching)
-COPY package.json package-lock.json ./
+# Copy package files first to leverage Docker cache
+COPY package*.json ./
+COPY .npmrc* ./
 
-# Install Node.js dependencies
-RUN npm install --legacy-peer-deps
+# Install dependencies (clean cache for smaller image)
+RUN npm ci --no-optional && \
+    npm cache clean --force
 
-# Copy the full project
+# Copy all source files
 COPY . .
 
-# ✅ Build Vite assets
+# Build the application (adjust if using different build tools)
 RUN npm run build
 
-# Step 3: Final PHP Image
-FROM php:8.1-fpm as final
+# ----------------------------
+# Stage 2: Production server
+FROM nginx:1.25-alpine
 
-WORKDIR /var/www/html
+# Remove default Nginx content
+RUN rm -rf /usr/share/nginx/html/*
 
-# Copy Laravel project from previous PHP stage
-COPY --from=php-builder /var/www/html /var/www/html
+# Copy built assets from builder
+COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy frontend assets from Node.js stage
-COPY --from=node-builder /app/public/build /var/www/html/public/build
+# Copy custom Nginx config (if needed)
+# COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# ✅ Fix permissions
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
-
-# Expose the correct port
-EXPOSE 10000
-
-# ✅ Start Laravel application
-CMD php artisan serve --host 0.0.0.0 --port=$PORT
+# Expose port and start Nginx
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
