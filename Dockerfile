@@ -1,5 +1,5 @@
-# Step 1: Use official PHP image with required extensions
-FROM php:8.2-fpm as php-builder
+# Step 1: Use official PHP 8.1 image
+FROM php:8.1-fpm as php-builder
 
 WORKDIR /var/www/html
 
@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install pdo pdo_mysql gd mbstring zip exif pcntl bcmath
 
-# ✅ Verify PHP is installed before proceeding
+# ✅ Verify PHP version
 RUN php -v
 
 # Install Composer
@@ -32,7 +32,7 @@ RUN composer install --no-dev --optimize-autoloader
 # ✅ Fix Laravel permissions
 RUN chmod -R 777 storage bootstrap/cache
 
-# ✅ Now run artisan commands
+# ✅ Run artisan commands (NOW PHP IS INSTALLED)
 RUN php artisan config:clear && php artisan cache:clear
 RUN php artisan route:clear && php artisan view:clear
 RUN php artisan ziggy:generate
@@ -51,15 +51,11 @@ RUN npm install --legacy-peer-deps
 # Copy the full project
 COPY . .
 
-# ✅ Ensure Laravel is ready before building Vite assets
-RUN php artisan config:clear
-RUN php artisan ziggy:generate
-
-# ✅ Now build frontend assets
+# ✅ Build Vite assets
 RUN npm run build
 
 # Step 3: Final PHP Image
-FROM php:8.2-fpm as final
+FROM php:8.1-fpm as final
 
 WORKDIR /var/www/html
 
