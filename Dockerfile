@@ -1,9 +1,9 @@
-# Step 1: Base PHP Image for Laravel
+# Step 1: Use official PHP image with required extensions
 FROM php:8.2-fpm as php-builder
 
 WORKDIR /var/www/html
 
-# Install system dependencies and PHP extensions
+# Install required system dependencies and PHP extensions
 RUN apt-get update && apt-get install -y \
     curl \
     unzip \
@@ -17,24 +17,27 @@ RUN apt-get update && apt-get install -y \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install pdo pdo_mysql gd mbstring zip exif pcntl bcmath
 
+# ✅ Verify PHP is installed before proceeding
+RUN php -v
+
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 # Copy Laravel project files
 COPY . .
 
-# ✅ Ensure Laravel is installed before running artisan commands
+# ✅ Ensure Composer dependencies are installed before running artisan commands
 RUN composer install --no-dev --optimize-autoloader
 
-# ✅ Fix permissions for Laravel storage
+# ✅ Fix Laravel permissions
 RUN chmod -R 777 storage bootstrap/cache
 
-# ✅ Run artisan commands inside the PHP container
+# ✅ Now run artisan commands
 RUN php artisan config:clear && php artisan cache:clear
 RUN php artisan route:clear && php artisan view:clear
 RUN php artisan ziggy:generate
 
-# Step 2: Node.js for Vite Build
+# Step 2: Use Node.js for Vite Build
 FROM node:20 as node-builder
 
 WORKDIR /app
@@ -45,7 +48,7 @@ COPY package.json package-lock.json ./
 # Install Node.js dependencies
 RUN npm install --legacy-peer-deps
 
-# Copy full project
+# Copy the full project
 COPY . .
 
 # ✅ Ensure Laravel is ready before building Vite assets
@@ -66,11 +69,11 @@ COPY --from=php-builder /var/www/html /var/www/html
 # Copy frontend assets from Node.js stage
 COPY --from=node-builder /app/public/build /var/www/html/public/build
 
-# Set permissions
+# ✅ Fix permissions
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
 # Expose the correct port
 EXPOSE 10000
 
-# Start Laravel application
+# ✅ Start Laravel application
 CMD php artisan serve --host 0.0.0.0 --port=$PORT
